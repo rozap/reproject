@@ -1,12 +1,23 @@
+defmodule Mix.Tasks.Compile.Reproject do
+  @shortdoc "Compiles Reproject"
+
+  def run(_) do
+    IO.puts @shortdoc
+    {result, _error_code} = System.cmd("make", ["priv/reproject.so"], stderr_to_stdout: true)
+    Mix.shell.info result
+  end
+end
+
 defmodule Reproject.Mixfile do
   use Mix.Project
 
   def project do
     [app: :reproject,
-     version: "0.1.1",
-     elixir: "~> 1.3",
+     version: "0.1.2",
+     elixir: ">= 1.3.0 and <= 1.6.0",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
+     compilers: [:reproject, :elixir, :app],
      package: package(),
      description: description(),
      deps: deps()]
