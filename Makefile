@@ -24,9 +24,9 @@ mix.lock: mix.exs
 reproject: mix.lock priv/reproject.so
 	mix compile
 
-priv/reproject.so: src/reproject.c
+priv/reproject.so: src/reproject.cc
 	mkdir -p priv
-	$(CC) $(CFLAGS) -shared -o $@ src/reproject.c $(LDFLAGS)
+	$(CXX) $(CFLAGS) -shared -o $@ src/reproject.cc $(LDFLAGS)
 
 clean:
 	$(MIX) clean
