@@ -14,20 +14,16 @@ make
 Then `mix test` should pass.
 
 ## Usage
-
-Get the expanded projection definition
+Initialize a projection from a proj4 string
 ```elixir
-iex> {:ok, prj} = Reproject.create('+init=epsg:4326')
-iex> Reproject.get_def(prj)
-" +init=epsg:4326 +proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
+iex> {:ok, prj} = Reproject.create("+init=epsg:4326")
 ```
 
-
-Create a projection. This returns `{:ok, projection}` where projection
-is an opaque pointer referring to a C struct
+Initialize a projection from a WKT string
 ```elixir
-iex> Reproject.create('+init=epsg:4326')
-{:ok, ""}
+{:ok, prj} = Reproject.create_from_wkt("""
+  GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433],AUTHORITY["EPSG",4326]]
+""")
 ```
 
 Transform a point from source projection to dest projection
@@ -36,4 +32,10 @@ iex> {:ok, wgs84} = Reproject.create('+init=epsg:4326')
 iex> {:ok, crs2180} = Reproject.create('+init=epsg:2180')
 iex> Reproject.transform(wgs84, crs2180, {21.049804687501, 52.22900390625})
 {:ok, {639951.5695094677, 486751.7840663176}}
+```
+
+Get the expanded projection definition
+```elixir
+iex> Reproject.get_def(prj)
+" +init=epsg:4326 +proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
 ```
