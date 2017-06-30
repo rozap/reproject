@@ -29,6 +29,13 @@ defmodule Reproject do
   def do_create(_), do: {:error, :nif_not_loaded}
 
 
+  @doc """
+    Create a projection from a WKT, like the one in the .prj component
+    of a shapefile. This returns the same thing as the `create/1` function.
+
+    iex> Reproject.create_from_wkt("GEOGCS[\\"GCS_WGS_1984\\",DATUM[\\"D_WGS_1984\\",SPHEROID[\\"WGS_1984\\",6378137.0,298.257223563]],PRIMEM[\\"Greenwich\\",0.0],UNIT[\\"Degree\\",0.0174532925199433],AUTHORITY[\\"EPSG\\",4326]]")
+    {:ok, ""}
+  """
   def create_from_wkt(wkt) when is_binary(wkt) do
     wkt_l = wkt
     |> String.strip
@@ -44,8 +51,9 @@ defmodule Reproject do
 
     iex> {:ok, wgs84} = Reproject.create("+init=epsg:4326")
     iex> {:ok, crs2180} = Reproject.create("+init=epsg:2180")
-    iex> Reproject.transform(wgs84, crs2180, {21.049804687501, 52.22900390625})
-    {:ok, {639951.5695094679, 486751.7840663176}}
+    iex> {:ok, {x, y}} = Reproject.transform(wgs84, crs2180, {21.049804687501, 52.22900390625})
+    iex> {is_number(x), is_number(y)}
+    {true, true}
   """
   def transform_2d(_, _, _), do: {:error, :nif_not_loaded}
   def transform_3d(_, _, _), do: {:error, :nif_not_loaded}

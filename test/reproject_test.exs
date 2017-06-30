@@ -18,8 +18,7 @@ defmodule ReprojectTest do
   end
 
   test "can create a projection from wkt" do
-    {:ok, wgs84} = Reproject.create_from_wkt(
-    """
+    {:ok, wgs84} = Reproject.create_from_wkt("""
       GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433],AUTHORITY["EPSG",4326]]
     """)
     {:ok, crs2180} =  Reproject.create("+init=epsg:2180")

@@ -13,7 +13,7 @@ defmodule Reproject.Mixfile do
 
   def project do
     [app: :reproject,
-     version: "0.1.2",
+     version: "0.1.4",
      elixir: ">= 1.3.0 and <= 1.6.0",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
@@ -33,7 +33,16 @@ defmodule Reproject.Mixfile do
     [
       maintainers: ["Chris Duranti"],
       licenses: ["Apache 2.0"],
-      links: %{"GitHub" => "https://github.com/rozap/reproject"}
+      links: %{"GitHub" => "https://github.com/rozap/reproject"},
+      files: ~w"""
+        mix.exs
+        README.md
+        LICENSE
+        Makefile
+        config
+        src
+        lib
+      """
     ]
   end
 
