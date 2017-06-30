@@ -4,6 +4,8 @@
 #include <ogr_srs_api.h>
 #include <string.h>
 #include <cpl_conv.h>
+#include <memory>
+#include <vector>
 
 #define MAX_PROJ_TERM_SIZE 1024
 #define ok(x) enif_make_tuple2(env, reproject_atoms.ok, x)
@@ -51,46 +53,33 @@ static void on_unload(ErlNifEnv* env, void* _priv) {
 }
 
 static ERL_NIF_TERM create(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
-  ERL_NIF_TERM result;
-  pj_cd* cd;
-  char proj_buf[MAX_PROJ_TERM_SIZE];
-  int proj_str_len;
-
   if (argc != 1) {
     return error("argc is wrong");
   }
 
-  proj_str_len = enif_get_string(env, argv[0], proj_buf, sizeof(proj_buf), ERL_NIF_LATIN1);
+  char proj_buf[MAX_PROJ_TERM_SIZE];
+  int proj_str_len = enif_get_string(env, argv[0], proj_buf, sizeof(proj_buf), ERL_NIF_LATIN1);
   if (proj_str_len <= 0) {
     return error("Failed to initialize the projection");
   }
 
-  cd = enif_alloc_resource(pj_cd_type, sizeof(pj_cd));
+  std::shared_ptr<pj_cd> cd((pj_cd*)enif_alloc_resource(pj_cd_type, sizeof(pj_cd)), enif_release_resource);
 
   if (!(cd->pj = pj_init_plus(proj_buf))) {
-    enif_release_resource(cd);
     return error(pj_strerrno(pj_errno));
   }
 
-  result = enif_make_resource(env, cd);
-  enif_release_resource(cd);
+  ERL_NIF_TERM result = enif_make_resource(env, cd.get());
   return ok(result);
 }
 
 static ERL_NIF_TERM create_from_wkt(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    int wkt_len;
-    ERL_NIF_TERM resource;
-    ERL_NIF_TERM ret;
-    char *proj_buf;
-    int wkt_str_len;
-    pj_cd* cd;
-
-
     if (argc != 2) {
       return error("argc is wrong");
     }
 
+    int wkt_len;
     if (!enif_get_int(env, argv[0], &wkt_len)) {
       return error("Failed to get len of wkt");
     }
@@ -99,56 +88,43 @@ static ERL_NIF_TERM create_from_wkt(ErlNifEnv* env, int argc, const ERL_NIF_TERM
       return error("Projection WKT length exceeds maximum WKT length");
     }
 
-    char *wkt_buf = malloc(wkt_len + 1);
-    wkt_str_len = enif_get_string(env, argv[1], wkt_buf, wkt_len + 1, ERL_NIF_LATIN1);
+    std::vector<char> wkt_buf(wkt_len + 1);
+    int wkt_str_len = enif_get_string(env, argv[1], &wkt_buf[0], wkt_buf.size(), ERL_NIF_LATIN1);
     if (wkt_str_len <= 0) {
-      ret = error("Failed to initialize the wkt from erlang side");
-      goto cleanup_wkt;
+      return error("Failed to initialize the wkt from erlang side");
     }
 
-    OGRSpatialReferenceH hSR = OSRNewSpatialReference(wkt_buf);
+    std::shared_ptr<void> hSR(OSRNewSpatialReference(&wkt_buf[0]), CPLFree);
     if (!hSR) {
-      ret = error("Failed to initialize OGRSpatialReferenceH");
-      goto cleanup_wkt;
+      return error("Failed to initialize OGRSpatialReferenceH");
     }
 
-    if (OSRExportToProj4(hSR, &proj_buf) != OGRERR_NONE) {
-      ret = error("Failed to export wkt to proj4");
-      goto cleanup_hsr;
+    char *proj_buf_raw;
+    if (OSRExportToProj4(hSR.get(), &proj_buf_raw) != OGRERR_NONE) {
+      return error("Failed to export wkt to proj4");
+    }
+    std::shared_ptr<char> proj_buf(proj_buf_raw, CPLFree);
+
+    std::shared_ptr<pj_cd> cd((pj_cd*) enif_alloc_resource(pj_cd_type, sizeof(pj_cd)), enif_release_resource);
+
+    if (!(cd->pj = pj_init_plus(proj_buf.get()))) {
+      return error(pj_strerrno(pj_errno));
     }
 
-    cd = enif_alloc_resource(pj_cd_type, sizeof(pj_cd));
-
-    if (!(cd->pj = pj_init_plus(proj_buf))) {
-      enif_release_resource(cd);
-      ret = error(pj_strerrno(pj_errno));
-      goto cleanup;
-    }
-
-    resource = enif_make_resource(env, cd);
-    enif_release_resource(cd);
-    ret = ok(resource);
-
-  cleanup:
-    CPLFree(proj_buf);
-  cleanup_hsr:
-    CPLFree(hSR);
-  cleanup_wkt:
-    free(wkt_buf);
-
-    return ret;
+    ERL_NIF_TERM resource = enif_make_resource(env, cd.get());
+    return ok(resource);
 }
 
 static ERL_NIF_TERM expand(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
-  ERL_NIF_TERM res;
   pj_cd *p;
-  char* expanded;
-
   if (!enif_get_resource(env, argv[0], pj_cd_type, (void **) &p)) {
     return error("Failed to get the resource - did you initialize it with create/1?");
   }
-  expanded = pj_get_def(p->pj, 0);
+
+  char* expanded = pj_get_def(p->pj, 0);
   int expanded_len = strlen(expanded);
+
+  ERL_NIF_TERM res;
   memcpy(enif_make_new_binary(env, expanded_len, &res), expanded, expanded_len);
   return res;
 }
@@ -231,4 +207,6 @@ static ErlNifFunc reproject_funcs[] =
     {"expand", 1, expand}
   };
 
-ERL_NIF_INIT(Elixir.Reproject, reproject_funcs, load, NULL, NULL, on_unload)
+extern "C" {
+  ERL_NIF_INIT(Elixir.Reproject, reproject_funcs, load, NULL, NULL, on_unload)
+}

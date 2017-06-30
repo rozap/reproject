@@ -45,7 +45,7 @@ defmodule Reproject do
     iex> {:ok, wgs84} = Reproject.create("+init=epsg:4326")
     iex> {:ok, crs2180} = Reproject.create("+init=epsg:2180")
     iex> Reproject.transform(wgs84, crs2180, {21.049804687501, 52.22900390625})
-    {:ok, {639951.5695094677, 486751.7840663176}}
+    {:ok, {639951.5695094679, 486751.7840663176}}
   """
   def transform_2d(_, _, _), do: {:error, :nif_not_loaded}
   def transform_3d(_, _, _), do: {:error, :nif_not_loaded}
