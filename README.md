@@ -1,10 +1,10 @@
 # reproject
-Reproject a point. This is just a nif that calls into proj4
+Reproject a point. This is just a nif that calls into proj4 and gdal
 
 ## Setup
-You need proj4 installed on your system. Install it with
+You need proj4 and gdal installed on your system. Install it with
 ```
-sudo apt-get install libproj-dev
+sudo apt-get install libproj-dev libgdal1-dev
 ```
 then
 ```
