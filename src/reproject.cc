@@ -121,11 +121,11 @@ static ERL_NIF_TERM expand(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) 
     return error("Failed to get the resource - did you initialize it with create/1?");
   }
 
-  char* expanded = pj_get_def(p->pj, 0);
-  int expanded_len = strlen(expanded);
+  std::shared_ptr<char> expanded(pj_get_def(p->pj, 0), pj_dalloc);
+  int expanded_len = strlen(expanded.get());
 
   ERL_NIF_TERM res;
-  memcpy(enif_make_new_binary(env, expanded_len, &res), expanded, expanded_len);
+  memcpy(enif_make_new_binary(env, expanded_len, &res), expanded.get(), expanded_len);
   return res;
 }
 
