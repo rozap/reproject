@@ -28,6 +28,17 @@ defmodule Reproject do
   def create(b) when is_binary(b), do: :binary.bin_to_list(b) |> do_create
   def do_create(_), do: {:error, :nif_not_loaded}
 
+
+  def create_from_wkt(wkt) when is_binary(wkt) do
+    wkt_l = wkt
+    |> String.strip
+    |> :binary.bin_to_list
+
+    do_create_from_wkt(length(wkt_l), wkt_l)
+  end
+  def do_create_from_wkt(_, _), do: {:error, :nif_not_loaded}
+
+
   @doc """
     Transform a point from source projection to dest projection
 

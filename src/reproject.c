@@ -1,7 +1,9 @@
 #include <assert.h>
 #include "erl_nif.h"
 #include "projects.h"
+#include <ogr_srs_api.h>
 #include <string.h>
+#include <cpl_conv.h>
 
 #define MAX_PROJ_TERM_SIZE 1024
 #define ok(x) enif_make_tuple2(env, reproject_atoms.ok, x)
@@ -73,6 +75,68 @@ static ERL_NIF_TERM create(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) 
   result = enif_make_resource(env, cd);
   enif_release_resource(cd);
   return ok(result);
+}
+
+static ERL_NIF_TERM create_from_wkt(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
+{
+    int wkt_len;
+    ERL_NIF_TERM resource;
+    ERL_NIF_TERM ret;
+    char *proj_buf;
+    int wkt_str_len;
+    pj_cd* cd;
+
+
+    if (argc != 2) {
+      return error("argc is wrong");
+    }
+
+    if (!enif_get_int(env, argv[0], &wkt_len)) {
+      return error("Failed to get len of wkt");
+    }
+
+    if (wkt_len >= MAX_PROJ_TERM_SIZE) {
+      return error("Projection WKT length exceeds maximum WKT length");
+    }
+
+    char *wkt_buf = malloc(wkt_len + 1);
+    wkt_str_len = enif_get_string(env, argv[1], wkt_buf, wkt_len + 1, ERL_NIF_LATIN1);
+    if (wkt_str_len <= 0) {
+      ret = error("Failed to initialize the wkt from erlang side");
+      goto cleanup_wkt;
+    }
+
+    OGRSpatialReferenceH hSR = OSRNewSpatialReference(wkt_buf);
+    if (!hSR) {
+      ret = error("Failed to initialize OGRSpatialReferenceH");
+      goto cleanup_wkt;
+    }
+
+    if (OSRExportToProj4(hSR, &proj_buf) != OGRERR_NONE) {
+      ret = error("Failed to export wkt to proj4");
+      goto cleanup_hsr;
+    }
+
+    cd = enif_alloc_resource(pj_cd_type, sizeof(pj_cd));
+
+    if (!(cd->pj = pj_init_plus(proj_buf))) {
+      enif_release_resource(cd);
+      ret = error(pj_strerrno(pj_errno));
+      goto cleanup;
+    }
+
+    resource = enif_make_resource(env, cd);
+    enif_release_resource(cd);
+    ret = ok(resource);
+
+  cleanup:
+    CPLFree(proj_buf);
+  cleanup_hsr:
+    CPLFree(hSR);
+  cleanup_wkt:
+    free(wkt_buf);
+
+    return ret;
 }
 
 static ERL_NIF_TERM expand(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
@@ -163,6 +227,7 @@ static ErlNifFunc reproject_funcs[] =
     {"transform_2d", 3, transform_2d},
     {"transform_3d", 3, transform_3d},
     {"do_create", 1, create},
+    {"do_create_from_wkt", 2, create_from_wkt},
     {"expand", 1, expand}
   };
 
