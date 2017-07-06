@@ -28,14 +28,14 @@ Initialize a projection from a WKT string
 
 Transform a point from source projection to dest projection
 ```elixir
-iex> {:ok, wgs84} = Reproject.create('+init=epsg:4326')
-iex> {:ok, crs2180} = Reproject.create('+init=epsg:2180')
+iex> {:ok, wgs84} = Reproject.create("+init=epsg:4326")
+iex> {:ok, crs2180} = Reproject.create("+init=epsg:2180")
 iex> Reproject.transform(wgs84, crs2180, {21.049804687501, 52.22900390625})
 {:ok, {639951.5695094677, 486751.7840663176}}
 ```
 
 Get the expanded projection definition
 ```elixir
-iex> Reproject.get_def(prj)
+iex> Reproject.expand(prj)
 " +init=epsg:4326 +proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
 ```
