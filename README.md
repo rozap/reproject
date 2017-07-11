@@ -19,6 +19,13 @@ Initialize a projection from a proj4 string
 iex> {:ok, prj} = Reproject.create("+init=epsg:4326")
 ```
 
+Initialize a projection from a PRJ component of a shapefile
+```elixir
+{:ok, prj} = Reproject.create_from_prj("""
+  GEOGCS["GCS_WGS_1984",DATUM["D_WGS_1984",SPHEROID["WGS_1984",6378137.0,298.257223563]],PRIMEM["Greenwich",0.0],UNIT["Degree",0.0174532925199433],AUTHORITY["EPSG",4326]]
+""")
+```
+
 Initialize a projection from a WKT string
 ```elixir
 {:ok, prj} = Reproject.create_from_wkt("""
