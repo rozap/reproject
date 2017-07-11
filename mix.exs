@@ -13,7 +13,7 @@ defmodule Reproject.Mixfile do
 
   def project do
     [app: :reproject,
-     version: "0.1.4",
+     version: "0.1.6",
      elixir: ">= 1.3.0 and <= 1.6.0",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
