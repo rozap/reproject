@@ -75,7 +75,7 @@ static ERL_NIF_TERM create(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) 
 
 static ERL_NIF_TERM create_from_wkt(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
-    if (argc != 2) {
+    if (argc != 3) {
       return error("argc is wrong");
     }
 
@@ -97,6 +97,16 @@ static ERL_NIF_TERM create_from_wkt(ErlNifEnv* env, int argc, const ERL_NIF_TERM
     std::shared_ptr<void> hSR(OSRNewSpatialReference(&wkt_buf[0]), CPLFree);
     if (!hSR) {
       return error("Failed to initialize OGRSpatialReferenceH");
+    }
+
+    int morph_from_esri;
+    if (!enif_get_int(env, argv[2], &morph_from_esri)) {
+      return error("Is this ESRI or not?");
+    }
+    if (morph_from_esri > 0) {
+      if (OSRMorphFromESRI(hSR.get()) != OGRERR_NONE) {
+        return error("Failed to morph from esri");
+      }
     }
 
     char *proj_buf_raw;
@@ -203,7 +213,7 @@ static ErlNifFunc reproject_funcs[] =
     {"transform_2d", 3, transform_2d},
     {"transform_3d", 3, transform_3d},
     {"do_create", 1, create},
-    {"do_create_from_wkt", 2, create_from_wkt},
+    {"do_create_from_wkt", 3, create_from_wkt},
     {"expand", 1, expand}
   };
 

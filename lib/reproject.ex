@@ -29,9 +29,9 @@ defmodule Reproject do
   def do_create(_), do: {:error, :nif_not_loaded}
 
 
+
   @doc """
-    Create a projection from a WKT, like the one in the .prj component
-    of a shapefile. This returns the same thing as the `create/1` function.
+    Create a projection from a WKT. This returns the same thing as the `create/1` function.
 
     iex> Reproject.create_from_wkt("GEOGCS[\\"GCS_WGS_1984\\",DATUM[\\"D_WGS_1984\\",SPHEROID[\\"WGS_1984\\",6378137.0,298.257223563]],PRIMEM[\\"Greenwich\\",0.0],UNIT[\\"Degree\\",0.0174532925199433],AUTHORITY[\\"EPSG\\",4326]]")
     {:ok, ""}
@@ -41,9 +41,26 @@ defmodule Reproject do
     |> String.strip
     |> :binary.bin_to_list
 
-    do_create_from_wkt(length(wkt_l), wkt_l)
+    do_create_from_wkt(length(wkt_l), wkt_l, 0)
   end
-  def do_create_from_wkt(_, _), do: {:error, :nif_not_loaded}
+  def do_create_from_wkt(_, _, _), do: {:error, :nif_not_loaded}
+
+
+  @doc """
+    Create a projection from a WKT, like the one in the .prj component
+    of a shapefile. This returns the same thing as the `create/1` function.
+
+    iex> Reproject.create_from_wkt("GEOGCS[\\"GCS_WGS_1984\\",DATUM[\\"D_WGS_1984\\",SPHEROID[\\"WGS_1984\\",6378137.0,298.257223563]],PRIMEM[\\"Greenwich\\",0.0],UNIT[\\"Degree\\",0.0174532925199433],AUTHORITY[\\"EPSG\\",4326]]")
+    {:ok, ""}
+  """
+  def create_from_prj(wkt) when is_binary(wkt) do
+    wkt_l = wkt
+    |> String.strip
+    |> :binary.bin_to_list
+
+    do_create_from_wkt(length(wkt_l), wkt_l, 1)
+  end
+
 
 
   @doc """
