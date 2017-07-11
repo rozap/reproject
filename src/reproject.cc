@@ -11,6 +11,37 @@
 #define ok(x) enif_make_tuple2(env, reproject_atoms.ok, x)
 #define error(x) enif_make_tuple2(env, reproject_atoms.error, enif_make_string(env, x, ERL_NIF_LATIN1))
 
+namespace {
+  template<typename T>
+  class simple_ptr {
+  public:
+    simple_ptr(T* ptr_, void (*destructor_)(void*))
+      : ptr(ptr_), destructor(destructor_)
+    {}
+
+    ~simple_ptr() {
+      if(ptr) destructor(ptr);
+    }
+
+    T* get() const {
+      return ptr;
+    }
+
+    T* operator->() const {
+      return ptr;
+    }
+
+    operator bool() const {
+      return ptr;
+    }
+  private:
+    simple_ptr(simple_ptr<T> const&); // prevent copies
+
+    T* ptr;
+    void (*destructor)(void*);
+  };
+}
+
 static ErlNifResourceType *pj_cd_type = NULL;
 
 static struct {
@@ -63,7 +94,7 @@ static ERL_NIF_TERM create(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) 
     return error("Failed to initialize the projection");
   }
 
-  std::shared_ptr<pj_cd> cd((pj_cd*)enif_alloc_resource(pj_cd_type, sizeof(pj_cd)), enif_release_resource);
+  simple_ptr<pj_cd> cd((pj_cd*)enif_alloc_resource(pj_cd_type, sizeof(pj_cd)), enif_release_resource);
 
   if (!(cd->pj = pj_init_plus(proj_buf))) {
     return error(pj_strerrno(pj_errno));
@@ -94,7 +125,7 @@ static ERL_NIF_TERM create_from_wkt(ErlNifEnv* env, int argc, const ERL_NIF_TERM
       return error("Failed to initialize the wkt from erlang side");
     }
 
-    std::shared_ptr<void> hSR(OSRNewSpatialReference(&wkt_buf[0]), CPLFree);
+    simple_ptr<void> hSR(OSRNewSpatialReference(&wkt_buf[0]), CPLFree);
     if (!hSR) {
       return error("Failed to initialize OGRSpatialReferenceH");
     }
@@ -113,9 +144,9 @@ static ERL_NIF_TERM create_from_wkt(ErlNifEnv* env, int argc, const ERL_NIF_TERM
     if (OSRExportToProj4(hSR.get(), &proj_buf_raw) != OGRERR_NONE) {
       return error("Failed to export wkt to proj4");
     }
-    std::shared_ptr<char> proj_buf(proj_buf_raw, CPLFree);
+    simple_ptr<char> proj_buf(proj_buf_raw, CPLFree);
 
-    std::shared_ptr<pj_cd> cd((pj_cd*) enif_alloc_resource(pj_cd_type, sizeof(pj_cd)), enif_release_resource);
+    simple_ptr<pj_cd> cd((pj_cd*) enif_alloc_resource(pj_cd_type, sizeof(pj_cd)), enif_release_resource);
 
     if (!(cd->pj = pj_init_plus(proj_buf.get()))) {
       return error(pj_strerrno(pj_errno));
@@ -131,7 +162,7 @@ static ERL_NIF_TERM expand(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) 
     return error("Failed to get the resource - did you initialize it with create/1?");
   }
 
-  std::shared_ptr<char> expanded(pj_get_def(p->pj, 0), pj_dalloc);
+  simple_ptr<char> expanded(pj_get_def(p->pj, 0), pj_dalloc);
   int expanded_len = strlen(expanded.get());
 
   ERL_NIF_TERM res;
