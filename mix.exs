@@ -17,7 +17,7 @@ defmodule Reproject.Mixfile do
      elixir: ">= 1.3.0 and <= 1.6.0",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
-     compilers: [:elixir_make, :elixir, :app],
+     compilers: [:elixir_make] ++ Mix.compilers,
      package: package(),
      description: description(),
      deps: deps()]
