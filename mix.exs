@@ -1,13 +1,3 @@
-defmodule Mix.Tasks.Compile.Reproject do
-  @shortdoc "Compiles Reproject"
-
-  def run(_) do
-    IO.puts @shortdoc
-    {result, _error_code} = System.cmd("make", ["priv/reproject.so"], stderr_to_stdout: true)
-    Mix.shell.info result
-  end
-end
-
 defmodule Reproject.Mixfile do
   use Mix.Project
 
