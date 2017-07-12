@@ -16,13 +16,7 @@ endif
 
 .PHONY: all reproject clean
 
-all: reproject
-
-mix.lock: mix.exs
-	mix deps.get
-
-reproject: mix.lock priv/reproject.so
-	mix compile
+all: priv/reproject.so
 
 priv/reproject.so: src/reproject.cc
 	mkdir -p priv
