@@ -17,7 +17,7 @@ defmodule Reproject.Mixfile do
      elixir: ">= 1.3.0 and <= 1.6.0",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
-     compilers: [:reproject, :elixir, :app],
+     compilers: [:elixir_make, :elixir, :app],
      package: package(),
      description: description(),
      deps: deps()]
@@ -64,7 +64,8 @@ defmodule Reproject.Mixfile do
   # Type "mix help deps" for more examples and options
   defp deps do
     [
-      {:ex_doc, "~> 0.14", only: :dev}
+      {:ex_doc, "~> 0.14", only: :dev},
+      {:elixir_make, "~> 0.4", runtime: false}
     ]
   end
 end
