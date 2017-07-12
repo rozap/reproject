@@ -14,7 +14,7 @@ ifneq ($(OS),Windows_NT)
 	endif
 endif
 
-.PHONY: all reproject clean
+.PHONY: all clean
 
 all: priv/reproject.so
 
