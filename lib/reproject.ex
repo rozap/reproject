@@ -38,7 +38,7 @@ defmodule Reproject do
   """
   def create_from_wkt(wkt) when is_binary(wkt) do
     wkt_l = wkt
-    |> String.strip
+    |> String.trim
     |> :binary.bin_to_list
 
     do_create_from_wkt(length(wkt_l), wkt_l, 0)
@@ -55,7 +55,7 @@ defmodule Reproject do
   """
   def create_from_prj(wkt) when is_binary(wkt) do
     wkt_l = wkt
-    |> String.strip
+    |> String.trim
     |> :binary.bin_to_list
 
     do_create_from_wkt(length(wkt_l), wkt_l, 1)
