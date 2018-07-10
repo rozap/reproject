@@ -10,7 +10,7 @@ ifneq ($(OS),Windows_NT)
 	CFLAGS += -fPIC -I/usr/include/gdal
 
 	ifeq ($(shell uname),Darwin)
-		LDFLAGS += -dynamiclib -undefined dynamic_lookup
+		LDFLAGS += -std=c++11 -dynamiclib -undefined dynamic_lookup
 	endif
 endif
 
