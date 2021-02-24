@@ -4,7 +4,7 @@ defmodule Reproject.Mixfile do
   def project do
     [app: :reproject,
      version: "0.1.8",
-     elixir: ">= 1.3.0 and <= 1.7.0",
+     elixir: ">= 1.3.0",
      build_embedded: Mix.env == :prod,
      start_permanent: Mix.env == :prod,
      compilers: [:elixir_make] ++ Mix.compilers,
@@ -54,8 +54,8 @@ defmodule Reproject.Mixfile do
   # Type "mix help deps" for more examples and options
   defp deps do
     [
-      {:ex_doc, "~> 0.14"},
-      {:elixir_make, "~> 0.4", runtime: false}
+      {:ex_doc, "~> 0.23.0"},
+      {:elixir_make, "~> 0.6.2", runtime: false}
     ]
   end
 end

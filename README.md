@@ -6,12 +6,11 @@ You need proj4 and gdal installed on your system. Install it with
 ```
 sudo apt-get install libproj-dev libgdal1-dev
 ```
-then
-```
-make
-```
 
-Then `mix test` should pass.
+You may need to build from source. Download proj 4.9.3 [here](https://download.osgeo.org/proj/proj-4.9.3.tar.gz) and `./configure && make && make install`. On ubuntu 20, you may need to add /usr/local/lib to your library path, like `export LD_LIBRARY_PATH=/lib:/usr/lib:/usr/local/lib`
+
+
+Then `mix compile` should work and `mix test` should pass.
 
 ## Usage
 Initialize a projection from a proj4 string

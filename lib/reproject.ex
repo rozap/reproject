@@ -22,8 +22,7 @@ defmodule Reproject do
     Create a projection. This returns `{:ok, projection}` where projection
     is an opaque pointer referring to a C struct
 
-    iex> Reproject.create("+init=epsg:4326")
-    {:ok, ""}
+    iex> {:ok, _} = Reproject.create("+init=epsg:4326")
   """
   def create(b) when is_binary(b), do: :binary.bin_to_list(b) |> do_create
   def do_create(_), do: {:error, :nif_not_loaded}
@@ -33,8 +32,8 @@ defmodule Reproject do
   @doc """
     Create a projection from a WKT. This returns the same thing as the `create/1` function.
 
-    iex> Reproject.create_from_wkt("GEOGCS[\\"GCS_WGS_1984\\",DATUM[\\"D_WGS_1984\\",SPHEROID[\\"WGS_1984\\",6378137.0,298.257223563]],PRIMEM[\\"Greenwich\\",0.0],UNIT[\\"Degree\\",0.0174532925199433],AUTHORITY[\\"EPSG\\",4326]]")
-    {:ok, ""}
+    iex> {:ok, _} = Reproject.create_from_wkt("GEOGCS[\\"GCS_WGS_1984\\",DATUM[\\"D_WGS_1984\\",SPHEROID[\\"WGS_1984\\",6378137.0,298.257223563]],PRIMEM[\\"Greenwich\\",0.0],UNIT[\\"Degree\\",0.0174532925199433],AUTHORITY[\\"EPSG\\",4326]]")
+
   """
   def create_from_wkt(wkt) when is_binary(wkt) do
     wkt_l = wkt
@@ -50,8 +49,8 @@ defmodule Reproject do
     Create a projection from a WKT, like the one in the .prj component
     of a shapefile. This returns the same thing as the `create/1` function.
 
-    iex> Reproject.create_from_wkt("GEOGCS[\\"GCS_WGS_1984\\",DATUM[\\"D_WGS_1984\\",SPHEROID[\\"WGS_1984\\",6378137.0,298.257223563]],PRIMEM[\\"Greenwich\\",0.0],UNIT[\\"Degree\\",0.0174532925199433],AUTHORITY[\\"EPSG\\",4326]]")
-    {:ok, ""}
+    iex> {:ok, _} = Reproject.create_from_wkt("GEOGCS[\\"GCS_WGS_1984\\",DATUM[\\"D_WGS_1984\\",SPHEROID[\\"WGS_1984\\",6378137.0,298.257223563]],PRIMEM[\\"Greenwich\\",0.0],UNIT[\\"Degree\\",0.0174532925199433],AUTHORITY[\\"EPSG\\",4326]]")
+
   """
   def create_from_prj(wkt) when is_binary(wkt) do
     wkt_l = wkt
