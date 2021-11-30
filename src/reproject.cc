@@ -187,6 +187,8 @@ static ERL_NIF_TERM transform_2d(ErlNifEnv *env, int argc, const ERL_NIF_TERM ar
     return error("Invalid point");
   }
 
+  z = 0.0;
+
   if(pj_is_latlong(from_proj->pj)) {
     x *= DEG_TO_RAD;
     y *= DEG_TO_RAD;
