@@ -27,6 +27,12 @@ namespace {
       return ptr;
     }
 
+    T* extract() {
+      T* result = ptr;
+      ptr = NULL;
+      return result;
+    }
+
     T* operator->() const {
       return ptr;
     }
@@ -49,11 +55,17 @@ static struct {
     ERL_NIF_TERM error;
 } reproject_atoms;
 
-typedef struct { projPJ pj; } pj_cd;
+// nb this must be a POD type as it will be simply malloc'd and free'd.
+typedef struct {
+  projPJ pj;
+  void* hsr;
+} pj_cd;
 
 static void cleanup_proj_struct(ErlNifEnv *env, void *cd)
 {
-  pj_free(((pj_cd *) cd)->pj);
+  pj_cd* pcd = (pj_cd*)cd;
+  pj_free(pcd->pj);
+  if(pcd->hsr) CPLFree(pcd->hsr);
 }
 
 static int load(ErlNifEnv* env, void** _priv, ERL_NIF_TERM _info)
@@ -95,7 +107,7 @@ static ERL_NIF_TERM create(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) 
   }
 
   simple_ptr<pj_cd> cd((pj_cd*)enif_alloc_resource(pj_cd_type, sizeof(pj_cd)), enif_release_resource);
-
+  cd->hsr = NULL;
   if (!(cd->pj = pj_init_plus(proj_buf))) {
     return error(pj_strerrno(pj_errno));
   }
@@ -147,10 +159,11 @@ static ERL_NIF_TERM create_from_wkt(ErlNifEnv* env, int argc, const ERL_NIF_TERM
     simple_ptr<char> proj_buf(proj_buf_raw, CPLFree);
 
     simple_ptr<pj_cd> cd((pj_cd*) enif_alloc_resource(pj_cd_type, sizeof(pj_cd)), enif_release_resource);
-
+    cd->hsr = NULL;
     if (!(cd->pj = pj_init_plus(proj_buf.get()))) {
       return error(pj_strerrno(pj_errno));
     }
+    cd->hsr = hSR.extract();
 
     ERL_NIF_TERM resource = enif_make_resource(env, cd.get());
     return ok(resource);
@@ -168,6 +181,33 @@ static ERL_NIF_TERM expand(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) 
   ERL_NIF_TERM res;
   memcpy(enif_make_new_binary(env, expanded_len, &res), expanded.get(), expanded_len);
   return res;
+}
+
+static ERL_NIF_TERM get_projection_name(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
+  pj_cd *p;
+  if (!enif_get_resource(env, argv[0], pj_cd_type, (void **) &p)) {
+    return error("Failed to get the resource - did you initialize it with create/1?");
+  }
+
+  void* hSR = p->hsr;
+  if(!hSR) {
+    return error("projection was not created from wkt");
+  }
+
+  char const* name = OSRGetAttrValue(hSR, "PROJCS", 0);
+  if (name == nullptr) {
+    name = OSRGetAttrValue(hSR, "GEOGCS", 0);
+  }
+
+  if (name == nullptr) {
+    return error("could not determine projection name");
+  }
+
+  int name_len = strlen(name);
+
+  ERL_NIF_TERM res;
+  memcpy(enif_make_new_binary(env, name_len, &res), name, name_len);
+  return ok(res);
 }
 
 static ERL_NIF_TERM transform_2d(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
@@ -247,6 +287,7 @@ static ErlNifFunc reproject_funcs[] =
     {"transform_3d", 3, transform_3d},
     {"do_create", 1, create},
     {"do_create_from_wkt", 3, create_from_wkt},
+    {"get_projection_name", 1, get_projection_name},
     {"expand", 1, expand}
   };
 

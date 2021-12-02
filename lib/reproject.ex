@@ -19,6 +19,16 @@ defmodule Reproject do
   def expand(_), do: {:error, :nif_not_loaded}
 
   @doc """
+    Get a name for the projection
+
+    # iex> {:ok, prj} = Reproject.create_from_wkt("GEOGCS[\\"GCS_WGS_1984\\",DATUM[\\"D_WGS_1984\\",SPHEROID[\\"WGS_1984\\",6378137.0,298.257223563]],PRIMEM[\\"Greenwich\\",0.0],UNIT[\\"Degree\\",0.0174532925199433],AUTHORITY[\\"EPSG\\",4326]]")
+    # iex> Reproject.get_projection_name(prj)
+    # "WGS 84"
+  """
+  def get_projection_name(_), do: {:error, :nif_not_loaded}
+
+
+  @doc """
     Create a projection. This returns `{:ok, projection}` where projection
     is an opaque pointer referring to a C struct
 
