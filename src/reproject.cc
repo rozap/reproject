@@ -1,6 +1,6 @@
 #include <assert.h>
 #include "erl_nif.h"
-#include "projects.h"
+#include <proj.h>
 #include <ogr_srs_api.h>
 #include <string.h>
 #include <cpl_conv.h>
@@ -57,14 +57,14 @@ static struct {
 
 // nb this must be a POD type as it will be simply malloc'd and free'd.
 typedef struct {
-  projPJ pj;
+  PJ *pj;
   void* hsr;
 } pj_cd;
 
 static void cleanup_proj_struct(ErlNifEnv *env, void *cd)
 {
   pj_cd* pcd = (pj_cd*)cd;
-  pj_free(pcd->pj);
+  proj_destroy(pcd->pj);
   if(pcd->hsr) CPLFree(pcd->hsr);
 }
 
@@ -91,7 +91,6 @@ static int load(ErlNifEnv* env, void** _priv, ERL_NIF_TERM _info)
 }
 
 static void on_unload(ErlNifEnv* env, void* _priv) {
-  pj_deallocate_grids();
   return;
 }
 
@@ -108,8 +107,9 @@ static ERL_NIF_TERM create(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) 
 
   simple_ptr<pj_cd> cd((pj_cd*)enif_alloc_resource(pj_cd_type, sizeof(pj_cd)), enif_release_resource);
   cd->hsr = NULL;
-  if (!(cd->pj = pj_init_plus(proj_buf))) {
-    return error(pj_strerrno(pj_errno));
+  cd->pj = proj_create(PJ_DEFAULT_CTX, proj_buf);
+  if (!cd->pj) {
+    return error(proj_errno_string(proj_context_errno(PJ_DEFAULT_CTX)));
   }
 
   ERL_NIF_TERM result = enif_make_resource(env, cd.get());
@@ -160,8 +160,9 @@ static ERL_NIF_TERM create_from_wkt(ErlNifEnv* env, int argc, const ERL_NIF_TERM
 
     simple_ptr<pj_cd> cd((pj_cd*) enif_alloc_resource(pj_cd_type, sizeof(pj_cd)), enif_release_resource);
     cd->hsr = NULL;
-    if (!(cd->pj = pj_init_plus(proj_buf.get()))) {
-      return error(pj_strerrno(pj_errno));
+    cd->pj = proj_create(PJ_DEFAULT_CTX, proj_buf.get());
+    if (!cd->pj) {
+      return error(proj_errno_string(proj_context_errno(PJ_DEFAULT_CTX)));
     }
     cd->hsr = hSR.extract();
 
@@ -175,11 +176,14 @@ static ERL_NIF_TERM expand(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) 
     return error("Failed to get the resource - did you initialize it with create/1?");
   }
 
-  simple_ptr<char> expanded(pj_get_def(p->pj, 0), pj_dalloc);
-  int expanded_len = strlen(expanded.get());
+  const char* expanded = proj_as_proj_string(PJ_DEFAULT_CTX, p->pj, PJ_PROJ_5, NULL);
+  if (!expanded) {
+    return error("Failed to get projection definition");
+  }
+  int expanded_len = strlen(expanded);
 
   ERL_NIF_TERM res;
-  memcpy(enif_make_new_binary(env, expanded_len, &res), expanded.get(), expanded_len);
+  memcpy(enif_make_new_binary(env, expanded_len, &res), expanded, expanded_len);
   return res;
 }
 
@@ -210,10 +214,23 @@ static ERL_NIF_TERM get_projection_name(ErlNifEnv *env, int argc, const ERL_NIF_
   return ok(res);
 }
 
+// Create a normalized CRS-to-CRS transformation between two projections.
+// Uses proj_normalize_for_visualization to ensure lon/lat axis order,
+// matching the legacy pj_transform behavior.
+// The modern API handles degree/radian conversion automatically.
+static PJ* create_transform(PJ *from, PJ *to) {
+  PJ *P = proj_create_crs_to_crs_from_pj(PJ_DEFAULT_CTX, from, to, NULL, NULL);
+  if (!P) return NULL;
+
+  PJ *P_norm = proj_normalize_for_visualization(PJ_DEFAULT_CTX, P);
+  proj_destroy(P);
+  return P_norm;
+}
+
 static ERL_NIF_TERM transform_2d(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
   const ERL_NIF_TERM *point;
   int point_count;
-  double x, y, z;
+  double x, y;
   pj_cd *from_proj, *to_proj;
 
   if (!enif_get_resource(env, argv[0], pj_cd_type, (void **) &from_proj) ||
@@ -227,21 +244,21 @@ static ERL_NIF_TERM transform_2d(ErlNifEnv *env, int argc, const ERL_NIF_TERM ar
     return error("Invalid point");
   }
 
-  z = 0.0;
-
-  if(pj_is_latlong(from_proj->pj)) {
-    x *= DEG_TO_RAD;
-    y *= DEG_TO_RAD;
+  PJ *P = create_transform(from_proj->pj, to_proj->pj);
+  if (!P) {
+    return error("Failed to create transformation");
   }
-  if(pj_transform( from_proj->pj, to_proj->pj, 1, 1, &x, &y, &z) != 0) {
+
+  PJ_COORD input = proj_coord(x, y, 0, 0);
+  PJ_COORD output = proj_trans(P, PJ_FWD, input);
+  int err = proj_errno(P);
+  proj_destroy(P);
+
+  if (err != 0) {
     return error("transform_2d/3 failed");
   }
-  if(pj_is_latlong(to_proj->pj)) {
-    x *= RAD_TO_DEG;
-    y *= RAD_TO_DEG;
-  }
 
-  return ok(enif_make_tuple(env, 2, enif_make_double(env, x), enif_make_double(env, y)));
+  return ok(enif_make_tuple(env, 2, enif_make_double(env, output.xy.x), enif_make_double(env, output.xy.y)));
 }
 
 
@@ -263,21 +280,21 @@ static ERL_NIF_TERM transform_3d(ErlNifEnv *env, int argc, const ERL_NIF_TERM ar
     return error("Invalid point");
   }
 
-  if(pj_is_latlong(from_proj->pj)) {
-    x *= DEG_TO_RAD;
-    y *= DEG_TO_RAD;
-    z *= DEG_TO_RAD;
-  }
-  if(pj_transform( from_proj->pj, to_proj->pj, 1, 1, &x, &y, &z) != 0) {
-    return error("transform_3d/3 failed");
-  }
-  if(pj_is_latlong(to_proj->pj)) {
-    x *= RAD_TO_DEG;
-    y *= RAD_TO_DEG;
-    z *= RAD_TO_DEG;
+  PJ *P = create_transform(from_proj->pj, to_proj->pj);
+  if (!P) {
+    return error("Failed to create transformation");
   }
 
-  return ok(enif_make_tuple(env, 3, enif_make_double(env, x), enif_make_double(env, y), enif_make_double(env, z)));
+  PJ_COORD input = proj_coord(x, y, z, 0);
+  PJ_COORD output = proj_trans(P, PJ_FWD, input);
+  int err = proj_errno(P);
+  proj_destroy(P);
+
+  if (err != 0) {
+    return error("transform_3d/3 failed");
+  }
+
+  return ok(enif_make_tuple(env, 3, enif_make_double(env, output.xyz.x), enif_make_double(env, output.xyz.y), enif_make_double(env, output.xyz.z)));
 }
 
 

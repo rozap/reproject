@@ -12,9 +12,9 @@ defmodule Reproject do
   @doc """
     Get the expanded projection definition
 
-    iex> {:ok, prj} = Reproject.create("+init=epsg:4326")
+    iex> {:ok, prj} = Reproject.create("EPSG:4326")
     iex> Reproject.expand(prj)
-    " +init=epsg:4326 +proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"
+    "+proj=longlat +datum=WGS84 +no_defs +type=crs"
   """
   def expand(_), do: {:error, :nif_not_loaded}
 
@@ -32,7 +32,7 @@ defmodule Reproject do
     Create a projection. This returns `{:ok, projection}` where projection
     is an opaque pointer referring to a C struct
 
-    iex> {:ok, _} = Reproject.create("+init=epsg:4326")
+    iex> {:ok, _} = Reproject.create("EPSG:4326")
   """
   def create(b) when is_binary(b), do: :binary.bin_to_list(b) |> do_create
   def do_create(_), do: {:error, :nif_not_loaded}
@@ -75,8 +75,8 @@ defmodule Reproject do
   @doc """
     Transform a point from source projection to dest projection
 
-    iex> {:ok, wgs84} = Reproject.create("+init=epsg:4326")
-    iex> {:ok, crs2180} = Reproject.create("+init=epsg:2180")
+    iex> {:ok, wgs84} = Reproject.create("EPSG:4326")
+    iex> {:ok, crs2180} = Reproject.create("EPSG:2180")
     iex> {:ok, {x, y}} = Reproject.transform(wgs84, crs2180, {21.049804687501, 52.22900390625})
     iex> {is_number(x), is_number(y)}
     {true, true}
