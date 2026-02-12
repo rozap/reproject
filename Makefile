@@ -7,7 +7,7 @@ LDFLAGS += `pkg-config --libs proj`
 LDFLAGS += `pkg-config --libs gdal`
 
 ifneq ($(OS),Windows_NT)
-	CFLAGS += -fPIC -I/usr/include/gdal
+	CFLAGS += -fPIC `pkg-config --cflags gdal`
 
 	ifeq ($(shell uname),Darwin)
 		LDFLAGS += -std=c++11 -dynamiclib -undefined dynamic_lookup
