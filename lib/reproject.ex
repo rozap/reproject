@@ -26,6 +26,18 @@ defmodule Reproject do
   def expand(_), do: :erlang.nif_error(:nif_not_loaded)
 
   @doc """
+    Get the authority and SRID for a projection, returned as `{:ok, {authority, code}}`.
+
+    Works for projections created from authority strings, WKT with AUTHORITY[] nodes,
+    and ESRI-format WKT (returning the ESRI authority code).
+
+    iex> {:ok, prj} = Reproject.create("EPSG:4326")
+    iex> Reproject.get_authority(prj)
+    {:ok, {"EPSG", "4326"}}
+  """
+  def get_authority(_), do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc """
     Get a name for the projection
 
     # iex> {:ok, prj} = Reproject.create_from_wkt("GEOGCS[\\"GCS_WGS_1984\\",DATUM[\\"D_WGS_1984\\",SPHEROID[\\"WGS_1984\\",6378137.0,298.257223563]],PRIMEM[\\"Greenwich\\",0.0],UNIT[\\"Degree\\",0.0174532925199433],AUTHORITY[\\"EPSG\\",4326]]")

@@ -59,6 +59,8 @@ static struct {
 typedef struct {
   PJ *pj;
   void* hsr;
+  char stored_auth[64]; // resolved at creation time
+  char stored_code[64];
 } pj_cd;
 
 static void cleanup_proj_struct(ErlNifEnv *env, void *cd)
@@ -113,14 +115,28 @@ static ERL_NIF_TERM create(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) 
 
   simple_ptr<pj_cd> cd((pj_cd*)enif_alloc_resource(pj_cd_type, sizeof(pj_cd)), enif_release_resource);
   cd->hsr = NULL;
+  cd->stored_auth[0] = '\0';
+  cd->stored_code[0] = '\0';
   cd->pj = proj_create(PJ_DEFAULT_CTX, proj_buf);
   if (!cd->pj) {
     return error(proj_errno_string(proj_context_errno(PJ_DEFAULT_CTX)));
   }
 
+  // Authority is embedded in strings like "EPSG:4326"
+  const char *a = proj_get_id_auth_name(cd->pj, 0);
+  const char *c = proj_get_id_code(cd->pj, 0);
+  if (a && c) {
+    snprintf(cd->stored_auth, sizeof(cd->stored_auth), "%s", a);
+    snprintf(cd->stored_code, sizeof(cd->stored_code), "%s", c);
+  }
+
   ERL_NIF_TERM result = enif_make_resource(env, cd.get());
   return ok(result);
 }
+
+static void resolve_wkt_authority(const char *wkt,
+                                  char *out_auth, size_t auth_sz,
+                                  char *out_code, size_t code_sz);
 
 static ERL_NIF_TERM create_from_wkt(ErlNifEnv* env, int argc, const ERL_NIF_TERM argv[])
 {
@@ -152,25 +168,36 @@ static ERL_NIF_TERM create_from_wkt(ErlNifEnv* env, int argc, const ERL_NIF_TERM
     if (!enif_get_int(env, argv[2], &morph_from_esri)) {
       return error("Is this ESRI or not?");
     }
+    char *proj_buf_raw;
     if (morph_from_esri > 0) {
-      if (OSRMorphFromESRI(hSR.get()) != OGRERR_NONE) {
+      // Clone and morph for proj4 export, keeping original hSR unmorphed for authority lookup
+      simple_ptr<void> morphed(OSRClone(hSR.get()), CPLFree);
+      if (!morphed) {
+        return error("Failed to clone SRS for ESRI morphing");
+      }
+      if (OSRMorphFromESRI(morphed.get()) != OGRERR_NONE) {
         return error("Failed to morph from esri");
       }
-    }
-
-    char *proj_buf_raw;
-    if (OSRExportToProj4(hSR.get(), &proj_buf_raw) != OGRERR_NONE) {
+      if (OSRExportToProj4(morphed.get(), &proj_buf_raw) != OGRERR_NONE) {
+        return error("Failed to export wkt to proj4");
+      }
+    } else if (OSRExportToProj4(hSR.get(), &proj_buf_raw) != OGRERR_NONE) {
       return error("Failed to export wkt to proj4");
     }
     simple_ptr<char> proj_buf(proj_buf_raw, CPLFree);
 
     simple_ptr<pj_cd> cd((pj_cd*) enif_alloc_resource(pj_cd_type, sizeof(pj_cd)), enif_release_resource);
     cd->hsr = NULL;
+    cd->stored_auth[0] = '\0';
+    cd->stored_code[0] = '\0';
     cd->pj = proj_create(PJ_DEFAULT_CTX, proj_buf.get());
     if (!cd->pj) {
       return error(proj_errno_string(proj_context_errno(PJ_DEFAULT_CTX)));
     }
     cd->hsr = hSR.extract();
+    resolve_wkt_authority(&wkt_buf[0],
+                          cd->stored_auth, sizeof(cd->stored_auth),
+                          cd->stored_code, sizeof(cd->stored_code));
 
     ERL_NIF_TERM resource = enif_make_resource(env, cd.get());
     return ok(resource);
@@ -191,6 +218,57 @@ static ERL_NIF_TERM expand(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) 
   ERL_NIF_TERM res;
   memcpy(enif_make_new_binary(env, expanded_len, &res), expanded, expanded_len);
   return res;
+}
+
+// Resolve CRS authority and code from a WKT string at creation time.
+static void resolve_wkt_authority(const char *wkt,
+                                  char *out_auth, size_t auth_sz,
+                                  char *out_code, size_t code_sz)
+{
+  out_auth[0] = '\0';
+  out_code[0] = '\0';
+
+  PJ *crs = proj_create_from_wkt(PJ_DEFAULT_CTX, wkt, nullptr, nullptr, nullptr);
+  if (!crs) return;
+
+  int *confidences = nullptr;
+  PJ_OBJ_LIST *results = proj_identify(PJ_DEFAULT_CTX, crs, nullptr, nullptr, &confidences);
+
+  if (results &&
+      proj_list_get_count(results) > 0 &&
+      confidences &&
+      confidences[0] >= 70)
+  {
+    PJ *match = proj_list_get(PJ_DEFAULT_CTX, results, 0);
+    if (match) {
+      const char *a = proj_get_id_auth_name(match, 0);
+      const char *c = proj_get_id_code(match, 0);
+      if (a && c) {
+        snprintf(out_auth, auth_sz, "%s", a);
+        snprintf(out_code, code_sz, "%s", c);
+      }
+      proj_destroy(match);
+    }
+  }
+
+  if (results) proj_list_destroy(results);
+  if (confidences) free(confidences);
+  proj_destroy(crs);
+}
+
+static ERL_NIF_TERM get_authority(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
+  pj_cd *p;
+  if (!enif_get_resource(env, argv[0], pj_cd_type, (void **) &p)) {
+    return error("Failed to get the resource - did you initialize it with create/1?");
+  }
+  if (!p->stored_auth[0] || !p->stored_code[0]) {
+    return error("Could not determine authority and code");
+  }
+  ERL_NIF_TERM name_term, code_term;
+  size_t alen = strlen(p->stored_auth), clen = strlen(p->stored_code);
+  memcpy(enif_make_new_binary(env, alen, &name_term), p->stored_auth, alen);
+  memcpy(enif_make_new_binary(env, clen, &code_term), p->stored_code, clen);
+  return ok(enif_make_tuple2(env, name_term, code_term));
 }
 
 static ERL_NIF_TERM get_projection_name(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
@@ -311,6 +389,7 @@ static ErlNifFunc reproject_funcs[] =
     {"do_create", 1, create},
     {"do_create_from_wkt", 3, create_from_wkt},
     {"get_projection_name", 1, get_projection_name},
+    {"get_authority", 1, get_authority},
     {"expand", 1, expand}
   };
 
