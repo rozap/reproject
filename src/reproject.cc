@@ -68,8 +68,14 @@ static void cleanup_proj_struct(ErlNifEnv *env, void *cd)
   if(pcd->hsr) CPLFree(pcd->hsr);
 }
 
-static int load(ErlNifEnv* env, void** _priv, ERL_NIF_TERM _info)
+static int load(ErlNifEnv* env, void** _priv, ERL_NIF_TERM load_info)
 {
+  char proj_data_path[4096] = {0};
+  if (enif_get_string(env, load_info, proj_data_path, sizeof(proj_data_path), ERL_NIF_LATIN1) > 0) {
+    const char* paths[] = {proj_data_path};
+    proj_context_set_search_paths(PJ_DEFAULT_CTX, 1, paths);
+  }
+
   ErlNifResourceType *resource_type = enif_open_resource_type(
     env,
     "reproject",
@@ -86,6 +92,7 @@ static int load(ErlNifEnv* env, void** _priv, ERL_NIF_TERM _info)
 
   reproject_atoms.ok = enif_make_atom(env, "ok");
   reproject_atoms.error = enif_make_atom(env, "error");
+  proj_context_use_proj4_init_rules(PJ_DEFAULT_CTX, TRUE);
 
   return 0;
 }
