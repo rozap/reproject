@@ -1,12 +1,19 @@
 defmodule Reproject do
   @on_load {:init, 0}
 
-  app = Mix.Project.config[:app]
-
+  app = Mix.Project.config()[:app]
 
   def init do
-    path = :filename.join(:code.priv_dir(unquote(app)), 'reproject')
-    :ok = :erlang.load_nif(path, 0)
+    priv = :code.priv_dir(unquote(app))
+    proj_data = Path.join(to_string(priv), "proj_data")
+
+    path = :filename.join(priv, ~c"reproject")
+
+    case :erlang.load_nif(path, to_charlist(proj_data)) do
+      :ok -> :ok
+      {:error, {:reload, _}} -> :ok
+      {:error, _} -> :ok
+    end
   end
 
   @doc """
@@ -16,7 +23,19 @@ defmodule Reproject do
     iex> Reproject.expand(prj)
     "+proj=longlat +datum=WGS84 +no_defs +type=crs"
   """
-  def expand(_), do: {:error, :nif_not_loaded}
+  def expand(_), do: :erlang.nif_error(:nif_not_loaded)
+
+  @doc """
+    Get the authority and SRID for a projection, returned as `{:ok, {authority, code}}`.
+
+    Works for projections created from authority strings, WKT with AUTHORITY[] nodes,
+    and ESRI-format WKT (returning the ESRI authority code).
+
+    iex> {:ok, prj} = Reproject.create("EPSG:4326")
+    iex> Reproject.get_authority(prj)
+    {:ok, {"EPSG", "4326"}}
+  """
+  def get_authority(_), do: :erlang.nif_error(:nif_not_loaded)
 
   @doc """
     Get a name for the projection
@@ -25,8 +44,7 @@ defmodule Reproject do
     # iex> Reproject.get_projection_name(prj)
     # "WGS 84"
   """
-  def get_projection_name(_), do: {:error, :nif_not_loaded}
-
+  def get_projection_name(_), do: :erlang.nif_error(:nif_not_loaded)
 
   @doc """
     Create a projection. This returns `{:ok, projection}` where projection
@@ -35,9 +53,7 @@ defmodule Reproject do
     iex> {:ok, _} = Reproject.create("EPSG:4326")
   """
   def create(b) when is_binary(b), do: :binary.bin_to_list(b) |> do_create
-  def do_create(_), do: {:error, :nif_not_loaded}
-
-
+  def do_create(_), do: :erlang.nif_error(:nif_not_loaded)
 
   @doc """
     Create a projection from a WKT. This returns the same thing as the `create/1` function.
@@ -46,14 +62,15 @@ defmodule Reproject do
 
   """
   def create_from_wkt(wkt) when is_binary(wkt) do
-    wkt_l = wkt
-    |> String.trim
-    |> :binary.bin_to_list
+    wkt_l =
+      wkt
+      |> String.trim()
+      |> :binary.bin_to_list()
 
     do_create_from_wkt(length(wkt_l), wkt_l, 0)
   end
-  def do_create_from_wkt(_, _, _), do: {:error, :nif_not_loaded}
 
+  def do_create_from_wkt(_, _, _), do: :erlang.nif_error(:nif_not_loaded)
 
   @doc """
     Create a projection from a WKT, like the one in the .prj component
@@ -63,14 +80,13 @@ defmodule Reproject do
 
   """
   def create_from_prj(wkt) when is_binary(wkt) do
-    wkt_l = wkt
-    |> String.trim
-    |> :binary.bin_to_list
+    wkt_l =
+      wkt
+      |> String.trim()
+      |> :binary.bin_to_list()
 
     do_create_from_wkt(length(wkt_l), wkt_l, 1)
   end
-
-
 
   @doc """
     Transform a point from source projection to dest projection
@@ -81,9 +97,9 @@ defmodule Reproject do
     iex> {is_number(x), is_number(y)}
     {true, true}
   """
-  def transform_2d(_, _, _), do: {:error, :nif_not_loaded}
-  def transform_3d(_, _, _), do: {:error, :nif_not_loaded}
+  def transform_2d(_, _, _), do: :erlang.nif_error(:nif_not_loaded)
+  def transform_3d(_, _, _), do: :erlang.nif_error(:nif_not_loaded)
 
-  def transform(src, dst, {_x, _y} = p),     do: transform_2d(src, dst, p)
+  def transform(src, dst, {_x, _y} = p), do: transform_2d(src, dst, p)
   def transform(src, dst, {_x, _y, _z} = p), do: transform_3d(src, dst, p)
 end
