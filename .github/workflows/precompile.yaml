@@ -1,0 +1,179 @@
+name: Precompile NIFs
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  PROJ_VERSION: "9.4.1"
+  GDAL_VERSION: "3.9.3"
+  SQLITE_VERSION: "3470200"
+
+jobs:
+  linux:
+    name: NIF (${{ matrix.job.nif-version }}) - ${{ matrix.job.target }}
+    runs-on: ${{ matrix.job.os }}
+    env:
+      MIX_ENV: prod
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - {
+              target: x86_64-linux-gnu,
+              os: ubuntu-22.04,
+              otp: "25.x",
+              elixir: "1.17.x",
+              nif-version: "2.16",
+            }
+          - {
+              target: x86_64-linux-gnu,
+              os: ubuntu-22.04,
+              otp: "27.x",
+              elixir: "1.17.x",
+              nif-version: "2.17",
+            }
+          - {
+              target: aarch64-linux-gnu,
+              os: ubuntu-22.04-arm,
+              otp: "25.x",
+              elixir: "1.17.x",
+              nif-version: "2.16",
+            }
+          - {
+              target: aarch64-linux-gnu,
+              os: ubuntu-22.04-arm,
+              otp: "27.x",
+              elixir: "1.17.x",
+              nif-version: "2.17",
+            }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # We use setup-beam because it works on arm as well and mise does not
+      - uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.job.otp }}
+          elixir-version: ${{ matrix.job.elixir }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache prebuilt PROJ + GDAL
+        id: cache-libs
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/prebuilt
+          key: libs-${{ matrix.job.os }}-proj-${{ env.PROJ_VERSION }}-gdal-${{ env.GDAL_VERSION }}-sqlite-${{ env.SQLITE_VERSION }}
+
+      - name: Build PROJ + GDAL (static, via Docker)
+        if: steps.cache-libs.outputs.cache-hit != 'true'
+        run: |
+          bash scripts/build_libs.sh
+
+      - name: Install Hex + Rebar
+        run: mix local.hex --force && mix local.rebar --force
+
+      - name: Install deps
+        run: mix deps.get
+
+      - name: Precompile NIF
+        run: |
+          export BUNDLED_LIBS_PREFIX=${{ github.workspace }}/prebuilt
+          export ELIXIR_MAKE_CACHE_DIR=$(pwd)/cache
+          mkdir -p "${ELIXIR_MAKE_CACHE_DIR}"
+          mix elixir_make.precompile
+
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: cache/*.tar.gz
+
+  macos:
+    name: NIF (${{ matrix.job.nif-version }}) - ${{ matrix.job.target }}
+    runs-on: ${{ matrix.job.os }}
+    env:
+      MIX_ENV: prod
+    strategy:
+      fail-fast: false
+      matrix:
+        job:
+          - {
+              target: aarch64-apple-darwin,
+              os: macos-14,
+              otp: "25.1",
+              elixir: "1.17.0",
+              nif-version: "2.16",
+            }
+          - {
+              target: aarch64-apple-darwin,
+              os: macos-14,
+              otp: "27.0",
+              elixir: "1.17.0",
+              nif-version: "2.17",
+            }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Install mise
+      - name: Setup mise
+        uses: jdx/mise-action@v2
+
+      # We need to use the version from the job to ensure nif 2.16 gets built on otp 25
+      - name: Ignore .tool-versions for CI
+        run: rm -f .tool-versions
+
+      # Cache mise installs
+      - name: Cache mise
+        id: mise-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/mise
+          key: mise-${{ runner.os }}-${{ matrix.job.otp }}-${{ matrix.job.elixir }}
+
+      # Install Erlang & Elixir
+      - name: Install Erlang & Elixir via mise
+        env:
+          ELIXIR_VERSION: ${{ matrix.job.elixir }}
+          OTP_VERSION: ${{ matrix.job.otp }}
+        run: |
+          ELIXIR_OTP_VERSION=$(echo $OTP_VERSION | cut -d. -f1)
+          mise use -g erlang@${OTP_VERSION}
+          mise use -g elixir@${ELIXIR_VERSION}-otp-${ELIXIR_OTP_VERSION}
+
+      - name: Cache prebuilt PROJ + GDAL
+        id: cache-libs
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/prebuilt
+          key: libs-${{ matrix.job.os }}-proj-${{ env.PROJ_VERSION }}-gdal-${{ env.GDAL_VERSION }}-sqlite-${{ env.SQLITE_VERSION }}
+
+      - name: Build PROJ + GDAL (static)
+        if: steps.cache-libs.outputs.cache-hit != 'true'
+        env:
+          PROJ_VERSION: ${{ env.PROJ_VERSION }}
+          GDAL_VERSION: ${{ env.GDAL_VERSION }}
+        run: |
+          bash scripts/build_libs.sh
+
+      - name: Install Hex + Rebar
+        run: mix local.hex --force && mix local.rebar --force
+
+      - name: Install deps
+        run: mix deps.get
+
+      - name: Precompile NIF
+        run: |
+          export BUNDLED_LIBS_PREFIX=${{ github.workspace }}/prebuilt
+          export ELIXIR_MAKE_CACHE_DIR=$(pwd)/cache
+          export CXXFLAGS="-std=c++17"
+          mkdir -p "${ELIXIR_MAKE_CACHE_DIR}"
+          mix elixir_make.precompile
+
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: cache/*.tar.gz

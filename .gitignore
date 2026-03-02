@@ -3,5 +3,8 @@
 /deps
 /priv
 /doc
+/prebuilt
+/prebuilt-aarch64
+/cache
 erl_crash.dump
 *.ez
