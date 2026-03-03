@@ -16,7 +16,7 @@ defmodule Reproject do
     iex> Reproject.expand(prj)
     "+proj=longlat +datum=WGS84 +no_defs +type=crs"
   """
-  def expand(_), do: {:error, :nif_not_loaded}
+  def expand(_), do: :erlang.nif_error(:nif_not_loaded)
 
   @doc """
     Get a name for the projection
@@ -25,7 +25,7 @@ defmodule Reproject do
     # iex> Reproject.get_projection_name(prj)
     # "WGS 84"
   """
-  def get_projection_name(_), do: {:error, :nif_not_loaded}
+  def get_projection_name(_), do: :erlang.nif_error(:nif_not_loaded)
 
 
   @doc """
@@ -35,7 +35,7 @@ defmodule Reproject do
     iex> {:ok, _} = Reproject.create("EPSG:4326")
   """
   def create(b) when is_binary(b), do: :binary.bin_to_list(b) |> do_create
-  def do_create(_), do: {:error, :nif_not_loaded}
+  def do_create(_), do: :erlang.nif_error(:nif_not_loaded)
 
 
 
@@ -52,7 +52,7 @@ defmodule Reproject do
 
     do_create_from_wkt(length(wkt_l), wkt_l, 0)
   end
-  def do_create_from_wkt(_, _, _), do: {:error, :nif_not_loaded}
+  def do_create_from_wkt(_, _, _), do: :erlang.nif_error(:nif_not_loaded)
 
 
   @doc """
@@ -81,8 +81,8 @@ defmodule Reproject do
     iex> {is_number(x), is_number(y)}
     {true, true}
   """
-  def transform_2d(_, _, _), do: {:error, :nif_not_loaded}
-  def transform_3d(_, _, _), do: {:error, :nif_not_loaded}
+  def transform_2d(_, _, _), do: :erlang.nif_error(:nif_not_loaded)
+  def transform_3d(_, _, _), do: :erlang.nif_error(:nif_not_loaded)
 
   def transform(src, dst, {_x, _y} = p),     do: transform_2d(src, dst, p)
   def transform(src, dst, {_x, _y, _z} = p), do: transform_3d(src, dst, p)
