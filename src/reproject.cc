@@ -57,6 +57,7 @@ static struct {
 
 // nb this must be a POD type as it will be simply malloc'd and free'd.
 typedef struct {
+  PJ_CONTEXT *ctx;
   PJ *pj;
   void* hsr;
 } pj_cd;
@@ -65,6 +66,7 @@ static void cleanup_proj_struct(ErlNifEnv *env, void *cd)
 {
   pj_cd* pcd = (pj_cd*)cd;
   proj_destroy(pcd->pj);
+  if (pcd->ctx) proj_context_destroy(pcd->ctx);
   if(pcd->hsr) CPLFree(pcd->hsr);
 }
 
@@ -106,10 +108,21 @@ static ERL_NIF_TERM create(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) 
   }
 
   simple_ptr<pj_cd> cd((pj_cd*)enif_alloc_resource(pj_cd_type, sizeof(pj_cd)), enif_release_resource);
+  // enif_alloc_resource returns uninitialized memory; set every field before any
+  // path that could release the resource (the destructor reads all of them).
+  cd->ctx = NULL;
+  cd->pj = NULL;
   cd->hsr = NULL;
-  cd->pj = proj_create(PJ_DEFAULT_CTX, proj_buf);
+  // Each resource owns a private PROJ context. PROJ contexts are NOT thread-safe,
+  // and these NIFs run on multiple BEAM scheduler threads, so sharing
+  // PJ_DEFAULT_CTX races and corrupts its proj.db (SQLite) handle.
+  cd->ctx = proj_context_create();
+  if (!cd->ctx) {
+    return error("Failed to create PROJ context");
+  }
+  cd->pj = proj_create(cd->ctx, proj_buf);
   if (!cd->pj) {
-    return error(proj_errno_string(proj_context_errno(PJ_DEFAULT_CTX)));
+    return error(proj_errno_string(proj_context_errno(cd->ctx)));
   }
 
   ERL_NIF_TERM result = enif_make_resource(env, cd.get());
@@ -159,10 +172,16 @@ static ERL_NIF_TERM create_from_wkt(ErlNifEnv* env, int argc, const ERL_NIF_TERM
     simple_ptr<char> proj_buf(proj_buf_raw, CPLFree);
 
     simple_ptr<pj_cd> cd((pj_cd*) enif_alloc_resource(pj_cd_type, sizeof(pj_cd)), enif_release_resource);
+    cd->ctx = NULL;
+    cd->pj = NULL;
     cd->hsr = NULL;
-    cd->pj = proj_create(PJ_DEFAULT_CTX, proj_buf.get());
+    cd->ctx = proj_context_create();
+    if (!cd->ctx) {
+      return error("Failed to create PROJ context");
+    }
+    cd->pj = proj_create(cd->ctx, proj_buf.get());
     if (!cd->pj) {
-      return error(proj_errno_string(proj_context_errno(PJ_DEFAULT_CTX)));
+      return error(proj_errno_string(proj_context_errno(cd->ctx)));
     }
     cd->hsr = hSR.extract();
 
@@ -176,7 +195,7 @@ static ERL_NIF_TERM expand(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) 
     return error("Failed to get the resource - did you initialize it with create/1?");
   }
 
-  const char* expanded = proj_as_proj_string(PJ_DEFAULT_CTX, p->pj, PJ_PROJ_5, NULL);
+  const char* expanded = proj_as_proj_string(p->ctx, p->pj, PJ_PROJ_5, NULL);
   if (!expanded) {
     return error("Failed to get projection definition");
   }
@@ -218,11 +237,11 @@ static ERL_NIF_TERM get_projection_name(ErlNifEnv *env, int argc, const ERL_NIF_
 // Uses proj_normalize_for_visualization to ensure lon/lat axis order,
 // matching the legacy pj_transform behavior.
 // The modern API handles degree/radian conversion automatically.
-static PJ* create_transform(PJ *from, PJ *to) {
-  PJ *P = proj_create_crs_to_crs_from_pj(PJ_DEFAULT_CTX, from, to, NULL, NULL);
+static PJ* create_transform(PJ_CONTEXT *ctx, PJ *from, PJ *to) {
+  PJ *P = proj_create_crs_to_crs_from_pj(ctx, from, to, NULL, NULL);
   if (!P) return NULL;
 
-  PJ *P_norm = proj_normalize_for_visualization(PJ_DEFAULT_CTX, P);
+  PJ *P_norm = proj_normalize_for_visualization(ctx, P);
   proj_destroy(P);
   return P_norm;
 }
@@ -244,8 +263,13 @@ static ERL_NIF_TERM transform_2d(ErlNifEnv *env, int argc, const ERL_NIF_TERM ar
     return error("Invalid point");
   }
 
-  PJ *P = create_transform(from_proj->pj, to_proj->pj);
+  PJ_CONTEXT *tctx = proj_context_create();
+  if (!tctx) {
+    return error("Failed to create PROJ context");
+  }
+  PJ *P = create_transform(tctx, from_proj->pj, to_proj->pj);
   if (!P) {
+    proj_context_destroy(tctx);
     return error("Failed to create transformation");
   }
 
@@ -253,6 +277,7 @@ static ERL_NIF_TERM transform_2d(ErlNifEnv *env, int argc, const ERL_NIF_TERM ar
   PJ_COORD output = proj_trans(P, PJ_FWD, input);
   int err = proj_errno(P);
   proj_destroy(P);
+  proj_context_destroy(tctx);
 
   if (err != 0) {
     return error("transform_2d/3 failed");
@@ -280,8 +305,13 @@ static ERL_NIF_TERM transform_3d(ErlNifEnv *env, int argc, const ERL_NIF_TERM ar
     return error("Invalid point");
   }
 
-  PJ *P = create_transform(from_proj->pj, to_proj->pj);
+  PJ_CONTEXT *tctx = proj_context_create();
+  if (!tctx) {
+    return error("Failed to create PROJ context");
+  }
+  PJ *P = create_transform(tctx, from_proj->pj, to_proj->pj);
   if (!P) {
+    proj_context_destroy(tctx);
     return error("Failed to create transformation");
   }
 
@@ -289,6 +319,7 @@ static ERL_NIF_TERM transform_3d(ErlNifEnv *env, int argc, const ERL_NIF_TERM ar
   PJ_COORD output = proj_trans(P, PJ_FWD, input);
   int err = proj_errno(P);
   proj_destroy(P);
+  proj_context_destroy(tctx);
 
   if (err != 0) {
     return error("transform_3d/3 failed");
@@ -300,12 +331,12 @@ static ERL_NIF_TERM transform_3d(ErlNifEnv *env, int argc, const ERL_NIF_TERM ar
 
 static ErlNifFunc reproject_funcs[] =
   {
-    {"transform_2d", 3, transform_2d},
-    {"transform_3d", 3, transform_3d},
-    {"do_create", 1, create},
-    {"do_create_from_wkt", 3, create_from_wkt},
-    {"get_projection_name", 1, get_projection_name},
-    {"expand", 1, expand}
+    {"transform_2d", 3, transform_2d, ERL_NIF_DIRTY_JOB_CPU_BOUND},
+    {"transform_3d", 3, transform_3d, ERL_NIF_DIRTY_JOB_CPU_BOUND},
+    {"do_create", 1, create, ERL_NIF_DIRTY_JOB_CPU_BOUND},
+    {"do_create_from_wkt", 3, create_from_wkt, ERL_NIF_DIRTY_JOB_CPU_BOUND},
+    {"get_projection_name", 1, get_projection_name, 0},
+    {"expand", 1, expand, 0}
   };
 
 extern "C" {
