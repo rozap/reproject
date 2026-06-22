@@ -46,7 +46,8 @@ defmodule Reproject.Mixfile do
 
   defp deps do
     [
-      {:elixir_make, "~> 0.9.0", runtime: false}
+      {:elixir_make, "~> 0.9.0", runtime: false},
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
   end
 end
