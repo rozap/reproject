@@ -26,7 +26,7 @@ defmodule Reproject.Mixfile do
   defp package do
     [
       maintainers: ["Chris Duranti"],
-      licenses: ["Apache 2.0"],
+      licenses: ["Apache-2.0"],
       links: %{"GitHub" => "https://github.com/rozap/reproject"},
       files: ~w"""
         mix.exs
